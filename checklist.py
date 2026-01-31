@@ -2,49 +2,19 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# -----------------------------
-# Page Configuration
-# -----------------------------
+# -------------------------------------------------
+# Page Config
+# -------------------------------------------------
 st.set_page_config(
-    page_title="Programme Checklist & Report",
+    page_title="Application Validation Checklist",
     layout="wide"
 )
 
-st.title("Programme Checklist & Report")
+st.title("Application Validation Checklist")
 
-# -----------------------------
-# Master Data
-# -----------------------------
-PROGRAMMES = [
-    "KEAM",
-    "BPHARM",
-    "BPHARM LE",
-    "ENGINEERING",
-    "MEDICAL",
-    "ARCHITECTURE"
-]
-
-CATEGORIES = [
-    "Development",
-    "Testing",
-    "Deployment",
-    "Audit",
-    "Maintenance"
-]
-
-CHECKLIST_ITEMS = [
-    "Requirements verified",
-    "Code review completed",
-    "Database validation done",
-    "Security checks completed",
-    "Performance tested",
-    "Documentation updated",
-    "Approval obtained"
-]
-
-# -----------------------------
-# Input Section
-# -----------------------------
+# -------------------------------------------------
+# Mandatory Header Details
+# -------------------------------------------------
 st.subheader("Mandatory Details")
 
 col1, col2, col3 = st.columns(3)
@@ -53,78 +23,150 @@ with col1:
     programmer_name = st.text_input("Programmer Name *")
 
 with col2:
-    programme = st.selectbox("Programme *", [""] + PROGRAMMES)
+    programme = st.selectbox(
+        "Programme *",
+        ["", "KEAM", "BPHARM", "ENGINEERING", "PG", "MEDICAL"]
+    )
 
 with col3:
-    category = st.selectbox("Category *", [""] + CATEGORIES)
+    category = st.selectbox(
+        "Category *",
+        ["", "Development", "Testing", "Audit", "Production"]
+    )
 
-# -----------------------------
-# Validation
-# -----------------------------
 mandatory_ok = all([
-    programmer_name.strip() != "",
-    programme != "",
-    category != ""
+    programmer_name.strip(),
+    programme,
+    category
 ])
 
 if not mandatory_ok:
-    st.warning("Please fill all mandatory fields (*) to proceed.")
+    st.warning("All mandatory fields (*) must be filled to proceed.")
 
 st.divider()
 
-# -----------------------------
-# Report Type Selection
-# -----------------------------
-report_type = st.radio(
+# -------------------------------------------------
+# Checklist Master (FROM YOUR TABLE)
+# -------------------------------------------------
+CHECKLIST = {
+    "Application Setup": [
+        ("Prospectus Upload", "Prospectus uploading"),
+        ("Academic Year Configuration", "Correct academic year configured"),
+        ("Age Limit Configuration", "Age limits set as per prospectus"),
+        ("Certificate Format Configuration", "Certificate formats as per prospectus"),
+    ],
+    "Applicant Support": [
+        ("Help Documentation Availability", "How to Apply, Fee Payment, Image Upload, Prerequisites"),
+        ("Contact Information", "Helpdesk / Contact number"),
+    ],
+    "Access & Recovery": [
+        ("Forgot Application Number", "Retrieval functionality working"),
+        ("Forgot Password", "Password reset working correctly"),
+        ("OTP Verification", "OTP generation and validation"),
+    ],
+    "Application Creation": [
+        ("New Application Creation", "Application creation in local/live environment"),
+        ("Field Validation", "Mandatory and optional fields validation"),
+        ("Button & Navigation Check", "All menus and buttons functioning"),
+        ("Save Draft / Resume", "Draft save and resume works"),
+    ],
+    "Application Submission": [
+        ("Final Submission", "Submission successful without errors"),
+    ],
+    "Fee Management": [
+        ("Application Fee – General", "Fee configuration for General category"),
+        ("Application Fee – SC/ST", "Fee configuration for SC/ST category"),
+        ("Payment Gateway Integration", "Payment gateway functionality"),
+        ("Payment Handling", "Success / failure handling"),
+    ],
+    "Photo & Documents": [
+        ("Live Photo Capture", "Live photo capture working"),
+        ("Image Upload Validation", "Size, format, clarity validated"),
+        ("Document Upload", "Certificates uploaded correctly"),
+    ]
+}
+
+# -------------------------------------------------
+# View Selector
+# -------------------------------------------------
+view_type = st.radio(
     "Select View",
     ["Checklist View", "Report View"],
     horizontal=True,
     disabled=not mandatory_ok
 )
 
-# -----------------------------
+# -------------------------------------------------
 # Checklist View
-# -----------------------------
-if report_type == "Checklist View" and mandatory_ok:
-    st.subheader("Checklist")
+# -------------------------------------------------
+if view_type == "Checklist View" and mandatory_ok:
+    st.subheader("Checklist Verification")
 
-    checklist_status = {}
-    for item in CHECKLIST_ITEMS:
-        checklist_status[item] = st.checkbox(item)
+    checklist_data = []
 
-    if st.button("Generate Report"):
-        completed = sum(checklist_status.values())
-        total = len(CHECKLIST_ITEMS)
+    for section, items in CHECKLIST.items():
+        st.markdown(f"### {section}")
 
+        for item, desc in items:
+            col1, col2, col3 = st.columns([3, 4, 2])
+
+            with col1:
+                st.markdown(f"**{item}**")
+
+            with col2:
+                st.caption(desc)
+
+            with col3:
+                status = st.selectbox(
+                    "Status",
+                    ["Pending", "OK", "Not OK", "NA"],
+                    key=f"{section}_{item}"
+                )
+
+            remarks = st.text_input(
+                "Remarks (if any)",
+                key=f"remark_{section}_{item}"
+            )
+
+            checklist_data.append({
+                "Section": section,
+                "Checklist Item": item,
+                "Description": desc,
+                "Status": status,
+                "Remarks": remarks
+            })
+
+    if st.button("Generate Checklist Report"):
         st.success("Checklist report generated successfully.")
 
-        report_data = {
-            "Programmer Name": programmer_name,
-            "Programme": programme,
-            "Category": category,
-            "Checklist Completed": f"{completed} / {total}",
-            "Generated On": datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-        }
+        df = pd.DataFrame(checklist_data)
 
         st.subheader("Checklist Summary")
-        st.json(report_data)
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
-# -----------------------------
-# Report View (Tabular)
-# -----------------------------
-if report_type == "Report View" and mandatory_ok:
-    st.subheader("Report View")
+        st.caption(
+            f"Generated by **{programmer_name}** | "
+            f"Programme: **{programme}** | "
+            f"Category: **{category}** | "
+            f"Date: {datetime.now().strftime('%d-%m-%Y %H:%M')}"
+        )
 
-    report_rows = []
-    for item in CHECKLIST_ITEMS:
-        report_rows.append({
-            "Programme": programme,
-            "Category": category,
-            "Checklist Item": item,
-            "Status": "Pending"
-        })
+# -------------------------------------------------
+# Report View (Read-only)
+# -------------------------------------------------
+if view_type == "Report View" and mandatory_ok:
+    st.subheader("Checklist Report View")
 
-    df = pd.DataFrame(report_rows)
+    rows = []
+    for section, items in CHECKLIST.items():
+        for item, desc in items:
+            rows.append({
+                "Application Area": section,
+                "Checklist Item": item,
+                "Validation Points": desc
+            })
+
+    df = pd.DataFrame(rows)
 
     st.dataframe(
         df,
@@ -132,13 +174,8 @@ if report_type == "Report View" and mandatory_ok:
         hide_index=True
     )
 
-    st.info(
-        f"Report generated for **{programme}** under **{category}** "
-        f"by **{programmer_name}**"
-    )
-
-# -----------------------------
+# -------------------------------------------------
 # Footer
-# -----------------------------
+# -------------------------------------------------
 st.divider()
-st.caption("© Programme Checklist System | Internal Use Only")
+st.caption("© Application Validation Checklist | Internal / Audit Use Only")
