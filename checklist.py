@@ -3,42 +3,58 @@ import pandas as pd
 from datetime import datetime
 from io import BytesIO
 
-# PDF
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
-
 # -------------------------------------------------
 # PAGE CONFIG
 # -------------------------------------------------
 st.set_page_config(
-    page_title="Application Audit Checklist",
+    page_title="Application Compliance Checklist",
     layout="wide"
 )
 
 # -------------------------------------------------
-# STYLES (Better UI)
+# STYLES (Govt Clean UI)
 # -------------------------------------------------
 st.markdown("""
 <style>
-.block-container {padding-top: 1.5rem;}
-.section-card {
-    padding: 14px;
-    border-radius: 10px;
-    background: #f6f8fa;
-    margin-bottom: 15px;
+.block-container {padding-top: 1rem;}
+
+.section-card{
+    background:#f5f7fa;
+    padding:14px;
+    border-radius:10px;
+    margin-bottom:14px;
+    border:1px solid #e0e0e0;
 }
-.ok {color: green; font-weight:600}
-.notok {color: red; font-weight:600}
-.na {color: orange; font-weight:600}
-.pending {color: gray; font-weight:600}
+
+.ok {color:green;font-weight:600}
+.notok {color:red;font-weight:600}
+.na {color:orange;font-weight:600}
+.pending {color:gray;font-weight:600}
 </style>
 """, unsafe_allow_html=True)
 
 st.title("Application Validation & Compliance Checklist")
 
 # -------------------------------------------------
-# CHECKLIST MASTER
+# HEADER DETAILS (Mandatory)
+# -------------------------------------------------
+st.subheader("Audit Details")
+
+c1, c2, c3 = st.columns(3)
+
+programmer = c1.text_input("Programmer Name *")
+programme = c2.text_input("Programme *")
+category = c3.text_input("Category *")
+
+auditor = st.text_input("Auditor Name (Digital Sign)")
+approver = st.text_input("Approver Name (Digital Sign)")
+
+if not all([programmer, programme, category]):
+    st.warning("Please fill all mandatory fields to continue")
+    st.stop()
+
+# -------------------------------------------------
+# MASTER CHECKLIST
 # -------------------------------------------------
 CHECKLIST = {
     "Application Setup": [
@@ -79,61 +95,38 @@ CHECKLIST = {
 }
 
 # -------------------------------------------------
-# HEADER DETAILS
+# STATUS OPTIONS
 # -------------------------------------------------
-st.subheader("Audit Details")
-
-c1, c2, c3 = st.columns(3)
-
-programmer = c1.text_input("Programmer Name *")
-programme = c2.text_input("Programme *")
-category = c3.text_input("Category *")
-
-auditor = st.text_input("Auditor Name (Digital Sign)")
-approver = st.text_input("Approver Name (Digital Sign)")
-
-if not all([programmer, programme, category]):
-    st.warning("Fill mandatory fields to continue")
-    st.stop()
+STATUS_OPTIONS = ["OK", "Not OK", "NA", "Pending"]
 
 # -------------------------------------------------
-# CHECKLIST FORM
+# CHECKLIST UI
 # -------------------------------------------------
-results = []
+st.subheader("Checklist Verification")
 
-status_colors = {
-    "OK": "ok",
-    "Not OK": "notok",
-    "NA": "na",
-    "Pending": "pending"
-}
-
-st.subheader("Checklist")
+rows = []
 
 for section, items in CHECKLIST.items():
 
     st.markdown(f"<div class='section-card'><h4>{section}</h4>", unsafe_allow_html=True)
 
     for item, desc in items:
-        c1, c2, c3, c4 = st.columns([2.5, 3, 1.2, 2])
 
-        with c1:
+        col1, col2, col3, col4 = st.columns([2.5, 3, 1.2, 2])
+
+        with col1:
             st.write(item)
 
-        with c2:
+        with col2:
             st.caption(desc)
 
-        with c3:
-            status = st.selectbox(
-                "",
-                ["OK", "Not OK", "NA", "Pending"],
-                key=item
-            )
+        with col3:
+            status = st.selectbox("", STATUS_OPTIONS, key=item)
 
-        with c4:
-            remark = st.text_input("Remark", key="r_"+item)
+        with col4:
+            remark = st.text_input("Remark", key="r_" + item)
 
-        results.append([section, item, desc, status, remark])
+        rows.append([section, item, desc, status, remark])
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -141,12 +134,12 @@ for section, items in CHECKLIST.items():
 # DATAFRAME
 # -------------------------------------------------
 df = pd.DataFrame(
-    results,
+    rows,
     columns=["Section", "Checklist Item", "Validation Points", "Status", "Remarks"]
 )
 
 # -------------------------------------------------
-# COMPLIANCE %
+# COMPLIANCE SCORE
 # -------------------------------------------------
 total = len(df)
 ok_count = len(df[df["Status"] == "OK"])
@@ -155,75 +148,87 @@ compliance = round((ok_count/total)*100, 1)
 st.metric("Compliance Score", f"{compliance}%")
 
 # -------------------------------------------------
+# COLOR PREVIEW TABLE
+# -------------------------------------------------
+def color_status(val):
+    if val == "OK":
+        return "background-color:#d4edda"
+    if val == "Not OK":
+        return "background-color:#f8d7da"
+    if val == "NA":
+        return "background-color:#fff3cd"
+    return ""
+
+styled = df.style.applymap(color_status, subset=["Status"])
+st.dataframe(styled, use_container_width=True)
+
+# -------------------------------------------------
 # EXCEL EXPORT
 # -------------------------------------------------
 def to_excel(dataframe):
     output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
         dataframe.to_excel(writer, index=False)
     return output.getvalue()
 
-excel_data = to_excel(df)
-
 st.download_button(
     "⬇ Download Excel",
-    excel_data,
+    to_excel(df),
     file_name="checklist_report.xlsx"
 )
 
 # -------------------------------------------------
-# PDF EXPORT (CERT STYLE)
+# HTML (PDF) EXPORT — CLOUD SAFE
 # -------------------------------------------------
-def generate_pdf(dataframe):
-    buffer = BytesIO()
+def generate_html_report(dataframe):
 
-    doc = SimpleDocTemplate(buffer)
-    styles = getSampleStyleSheet()
-    elements = []
+    table_html = dataframe.to_html(index=False)
 
-    elements.append(Paragraph("Application Compliance Report", styles["Heading1"]))
-    elements.append(Spacer(1, 10))
+    html = f"""
+    <html>
+    <head>
+    <style>
+    body{{font-family:Arial}}
+    table{{border-collapse:collapse;width:100%}}
+    th,td{{border:1px solid #000;padding:6px;font-size:12px}}
+    th{{background:#eee}}
+    </style>
+    </head>
 
-    meta = f"""
-    Programmer: {programmer}<br/>
-    Programme: {programme}<br/>
-    Category: {category}<br/>
-    Auditor: {auditor}<br/>
-    Approver: {approver}<br/>
-    Date: {datetime.now().strftime('%d-%m-%Y %H:%M')}
+    <body>
+    <h2>Application Compliance Report</h2>
+
+    <p>
+    <b>Programmer:</b> {programmer}<br>
+    <b>Programme:</b> {programme}<br>
+    <b>Category:</b> {category}<br>
+    <b>Auditor:</b> {auditor}<br>
+    <b>Approver:</b> {approver}<br>
+    <b>Date:</b> {datetime.now().strftime('%d-%m-%Y %H:%M')}
+    </p>
+
+    {table_html}
+
+    <br><br>
+    Auditor Signature: ______________________ <br><br>
+    Approver Signature: _____________________
+    </body>
+    </html>
     """
-    elements.append(Paragraph(meta, styles["Normal"]))
-    elements.append(Spacer(1, 15))
 
-    table_data = [dataframe.columns.tolist()] + dataframe.values.tolist()
-
-    table = Table(table_data, repeatRows=1)
-
-    table.setStyle(TableStyle([
-        ('BACKGROUND',(0,0),(-1,0),colors.lightgrey),
-        ('GRID',(0,0),(-1,-1),0.5,colors.black),
-        ('FONTSIZE',(0,0),(-1,-1),8),
-    ]))
-
-    elements.append(table)
-    doc.build(elements)
-
-    pdf = buffer.getvalue()
-    buffer.close()
-    return pdf
-
-pdf_data = generate_pdf(df)
+    return html.encode()
 
 st.download_button(
-    "⬇ Download PDF (CERT-In Format)",
-    pdf_data,
-    file_name="checklist_report.pdf"
+    "⬇ Download PDF Report",
+    generate_html_report(df),
+    file_name="checklist_report.html",
+    mime="text/html"
 )
 
-# -------------------------------------------------
-# TABLE PREVIEW
-# -------------------------------------------------
-st.subheader("Report Preview")
-st.dataframe(df, use_container_width=True)
+st.info("Open the downloaded file → Press Ctrl+P → Save as PDF")
 
-st.success("Ready for audit submission")
+# -------------------------------------------------
+# FOOTER
+# -------------------------------------------------
+st.divider()
+st.success("Checklist ready for audit submission")
